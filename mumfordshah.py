@@ -1,36 +1,20 @@
 #!/usr/bin/env python
-"""
-###############################
-Mumford-Shah image segmentation
-###############################
-
-Based on 
-
-[1] "A first-order primal-dual algorithm for convex problems with applications to imaging"
-Chambolle, Antonin and Pock, Thomas (2011)
-Journal of Mathematical Imaging and Vision. 40(1)
-
-Dykstra's method based on 
-
-[2]
-
-Unit simplex projection based on 
-
-[3]
-
-"""
-
 import numpy as np 
 import cv2 
 from sklearn.cluster import KMeans
 
-def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_f, res_G, n_iter = 100, eps = 1e-6):
+import argparse
+from os.path import basename
+import os.path 
+
+def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, n_iter = 100, eps = 1e-6):
 	x_bar = x.copy()
 	x_old = x.copy()
-	print 'Chambolle'
+	print 'Chambolle proximal point algorithm for mumford-shah image segmentation'
 	for n in range(n_iter):
-		print '--iteration', n
-		if (np.linalg.norm(x-x_old) < eps) and (n > 0):
+		err = np.linalg.norm(x-x_old)
+		print '--iteration', n, 'np.linalg.norm(x-x_old)', err 
+		if (err < eps) and (n > 0):
 			break 
 		x_old = x 
 		y = res_F(y + sigma*K(x_bar))
@@ -55,7 +39,11 @@ def div(p, h):
 	return u 
 
 #Project onto intersection of unit balls
-def dykstra(p):
+def project_balls(p):
+	eps_p = 1e-6
+	n_batch = 200
+	print 'Projection onto intersection of unit balls'
+
 	p0 = p 
 	k = p.shape[3]
 	r = k*(k-1)/2
@@ -70,18 +58,34 @@ def dykstra(p):
 
 	def proj(x, c):
 		[i,j] = pairs[c,:]
-		d = np.max(np.linalg.norm(x[:,:,:,i] - x[:,:,:,j], axis = 2))
-		if d > 1:
-			x[:,:,:,i] = x[:,:,:,i]/d
+		a = x[:,:,:,i]
+		b = x[:,:,:,j]
+		d = np.maximum(np.linalg.norm(a-b, axis = 2),1)
+		xa0 = a[:,:,0]*(1+1/d)/2 + b[:,:,0]*(1-1/d)/2
+		xa1 = a[:,:,1]*(1+1/d)/2 + b[:,:,1]*(1-1/d)/2
+		xb0 = a[:,:,0]*(1-1/d)/2 + b[:,:,0]*(1+1/d)/2
+		xb1 = a[:,:,1]*(1-1/d)/2 + b[:,:,1]*(1+1/d)/2
+		x[d>1,0,i] = xa0[d>1]
+		x[d>1,1,i] = xa1[d>1]
+		x[d>1,0,j] = xb0[d>1]
+		x[d>1,1,j] = xb1[d>1]
 		return x
 
-	n = 0
 	i = np.zeros((p.shape + (r,)))
-	while n < n_iter:
-		p = proj(p0 - i[:,:,:,:,n%r], n%r)
-		i[:,:,:,:,n%r] = p - (p0 - i[:,:,:,:,n%r])
-		p0 = p
-		n += 1
+	errs = np.zeros(r)
+	m = 0
+	err = eps_p + 1e6
+	while (err > eps_p) and m < n_batch:
+		print 'Batch', m, 'errors', errs
+		n = 0
+		while n < n_iter:
+			p = proj(p0 - i[:,:,:,:,n%r], n%r)
+			errs[n%r] = np.linalg.norm(p-p0)
+			i[:,:,:,:,n%r] = p - (p0 - i[:,:,:,:,n%r])
+			p0 = p
+			n += 1
+		m += 1
+		err = np.max(errs)
 	return p 
 
 def project_simplex(u):
@@ -97,6 +101,7 @@ def project_simplex(u):
 		xp = np.maximum(x + lmbda, 0)
 		return xp 
 
+	#Quite slow........could be parallelized 
 	for i in range(ny):
 		for j in range(nx):
 			u[i,j,:] = proj_prob(np.squeeze(u[i,j,:]))
@@ -110,11 +115,15 @@ def mumford(fn_in):
 	h = 1 			#Not sure this is right...
 	L2 = 8/h**2
 	sigma = 1/(L2 * tau)
-	lmda = 5
+	lmda = 5		#Not sure what this should be set to....
 	ny = 512
 
+	#Test code
+	#fn_in = './jellyfish.jpg'
+
+	bn = basename(os.path.splitext(fn_in)[0])
+
 	#Load image
-	fn_in = './jellyfish.jpg'
 	img = cv2.imread(fn_in)
 	(iny,inx) = img.shape[0:2]
 	img = cv2.resize(img, (int(inx*(ny/float(iny))), ny))
@@ -134,11 +143,11 @@ def mumford(fn_in):
 		for j in range(nx):
 			km_img[i,j,:] = centers[cl[i,j],:]
 	km_img = km_img.astype(np.uint8)
-	#cv2.imshow('test', km_img)
+	cv2.imwrite('%s_kmeans.png'%bn, km_img)
 	#cv2.waitKey()
 
 	#Generate resolvents and such
-	res_F = dykstra
+	res_F = project_balls
 	res_G = project_simplex
 	K = lambda x: grad(x, h)
 	K_star = lambda x: -div(x, h)
@@ -160,7 +169,7 @@ def mumford(fn_in):
 	#p = np.zeros((ny, nx, 2, nc))
 
 	#Run chambolle algorithm
-	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, n_iter = 100)
+	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, n_iter = 10)
 
 	#Take argmax of u tensor to obtain segmented image
 	#Paint the image by the cluster colors
@@ -170,5 +179,42 @@ def mumford(fn_in):
 			col = np.argmax(u_s[i,j,:])
 			ms_img[i,j,:] = centers[col,:]
 	ms_img = ms_img.astype(np.uint8)
-
+	cv2.imwrite('%s_MS.png'%bn, ms_img)
 	return ms_img
+
+if __name__ == '__main__':
+
+	usage = """mumfordshah.py [input_image]
+
+###############################
+Mumford-Shah image segmentation
+###############################
+
+Based on 
+
+[1] "A first-order primal-dual algorithm for convex problems with applications to imaging"
+Chambolle, Antonin and Pock, Thomas (2011)
+Journal of Mathematical Imaging and Vision. 40(1)
+
+Intersection of convex set projection method based on 
+
+[2] "A cyclic projection algorithm via duality"
+Gaffke, Norbert and Mathar, Rudolf (1989)
+Metrika. 36(1)
+
+Unit simplex projection based on 
+
+[3] "Projection onto the probability simplex : An efficient algorithm with a
+ simple proof and an application"
+Wang, Weiran and Miguel, A (2013)
+arXiv:1309.1541v1
+
+Ben Lansdell
+11/22/2016
+"""
+
+	parser = argparse.ArgumentParser()
+	parser.add_argument('fn_in', default='./jellyfish.jpg', 
+		help='input video file, any format readable by OpenCV')
+	args = parser.parse_args()
+	mumford(args.fn_in)
