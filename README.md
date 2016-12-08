@@ -14,6 +14,6 @@ Unit simplex projection based on
  simple proof and an application"
 Wang, Weiran and Miguel, A (2013)
 arXiv:1309.1541v1
+
 Ben Lansdell
 11/22/2016
-"""
