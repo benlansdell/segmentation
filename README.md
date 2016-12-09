@@ -2,15 +2,17 @@ Mumford-Shah image segmentation
 ===============================
 
 Based on:
- 1. "A first-order primal-dual algorithm for convex problems with applications to imaging" 
+ * "A first-order primal-dual algorithm for convex problems with applications to imaging" 
 Chambolle, Antonin and Pock, Thomas (2011)
 Journal of Mathematical Imaging and Vision. 40(1)
+
 Intersection of convex set projection method based on 
- 2. "A cyclic projection algorithm via duality"
+ * "A cyclic projection algorithm via duality"
 Gaffke, Norbert and Mathar, Rudolf (1989)
 Metrika. 36(1)
+
 Unit simplex projection based on 
- 3. "Projection onto the probability simplex : An efficient algorithm with a
+ * "Projection onto the probability simplex : An efficient algorithm with a
  simple proof and an application"
 Wang, Weiran and Miguel, A (2013)
 arXiv:1309.1541v1
