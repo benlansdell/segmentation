@@ -7,55 +7,66 @@ import argparse
 from os.path import basename
 import os.path 
 
-def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, n_iter = 100, eps = 1e-6, im_updates = 0, im_out = None):
+def J1(x, h):
+	return np.sum(np.linalg.norm(grad(x,h), axis = 2))
+
+def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = 100, eps = 1e-6, im_updates = 0, im_out = None):
 	x_bar = x.copy()
 	x_old = x.copy()
-	print 'Chambolle proximal point algorithm for mumford-shah image segmentation'
+
+	print('Chambolle proximal point algorithm for mumford-shah image segmentation\nIter:\tdX:\t\tJ(u):\t\tf:\t\tPrimal objective:')
 	for n in range(n_iter):
 		err = np.linalg.norm(x-x_old)
-		print '--iteration', n, 'np.linalg.norm(x-x_old)', err 
+		ju = j_tv(x);
+		fu = np.sum(f*x);
+		obj = fu + ju;
+		print('%d\t%f\t%f\t%f\t%f'%(n, err, ju, fu, obj));
 		if (err < eps) and (n > 0):
-			break 
-		x_old = x 
+			break
+		x_old = x.copy()
 		y = res_F(y + sigma*K(x_bar))
 		x = res_G(x - tau*(K_star(y)+f))
 		x_bar = x + theta*(x - x_old)
 
 		#If im_updates is greater than 0 then we output our progress every
 		#im_updates iterations
-		if im_updates > 0 and (n%im_updates) == 0:
-			#Print to im_out
-			ms_img = np.zeros(img.shape)
-			for i in range(ny):
-				for j in range(nx):
-					col = np.argmax(u_s[i,j,:])
-					ms_img[i,j,:] = centers[col,:]
-			ms_img = ms_img.astype(np.uint8)
-			cv2.imwrite('%s_MS_niter_%04d.png'%(bn,n_iter), ms_img)
+		#if im_updates > 0 and (n%im_updates) == 0:
+		#	#Print to im_out
+		#	ms_img = np.zeros(img.shape)
+		#	for i in range(ny):
+		#		for j in range(nx):
+		#			col = np.argmax(u_s[i,j,:])
+		#			ms_img[i,j,:] = centers[col,:]
+		#	ms_img = ms_img.astype(np.uint8)
+		#	cv2.imwrite('%s_MS_niter_%04d.png'%(bn,n_iter), ms_img)
 	return x
 
 def grad(u, h):
 	k = u.shape[2]
 	p = np.zeros((u.shape[0], u.shape[1], 2, k))
 	for i in range(k):
-		p[0:-1,:,0,i] = (u[1:,:,i] - u[0:-1,:,i])/h
-		p[:,0:-1,1,i] = (u[:,1:,i] - u[:,0:-1,i])/h
+		p[0:-1, :, 0, i] = (u[1:, :, i] - u[0:-1, :, i])/h
+		p[:, 0:-1, 1, i] = (u[:, 1:, i] - u[:, 0:-1, i])/h
 	return p 
 
 def div(p, h):
 	k = p.shape[3]
-	u = np.zeros((p.shape[0], p.shape[1], p.shape[3]))
+	u = np.zeros((p.shape[0], p.shape[1], k))
 	for i in range(k):
-		u[0:-1:,:,i] += (p[1:,:,0,i] - p[0:-1,:,0,i])/h
-		u[:,0:-1,i] += (p[:,1:,1,i] - p[:,0:-1,1,i])/h
+		#u[0:-1,:,i]  = (p[1:, :, 0, i] - p[0:-1, :, 0, i])/h
+		#u[:,0:-1,i] += (p[:, 1:, 1, i] - p[:, 0:-1, 1, i])/h
+		u[1:,:,i]  = (p[1:, :, 0, i] - p[0:-1, :, 0, i])/h
+		u[:,1:,i] += (p[:, 1:, 1, i] - p[:, 0:-1, 1, i])/h
 	return u 
 
 def project_balls(p):
-	print 'Projection onto unit balls'
+	#print 'Projection onto unit balls'
 	pt = np.transpose(p, (0,1,3,2))
 	n = np.linalg.norm(pt, axis = 3)
+	d = np.maximum(2*n, 1)
 	for i in range(pt.shape[3]):
-		pt[n>0.5,i] = pt[n>0.5,i]/(2*n[n>0.5])
+		pt[:,:,:,i] = pt[:,:,:,i]/d
+	#		pt[n>0.5,i] = pt[n>0.5,i]/(2*n[n>0.5])
 	p = np.transpose(pt, (0,1,3,2))
 	return p 
 
@@ -63,8 +74,7 @@ def project_balls(p):
 def project_balls_intersect(p):
 	eps_p = 1e-6
 	n_batch = 200
-	print 'Projection onto intersection of unit balls'
-
+	#print 'Projection onto intersection of unit balls'
 	p0 = p 
 	k = p.shape[3]
 	r = k*(k-1)/2
@@ -131,20 +141,21 @@ def project_simplex(u):
 	return u 
 
 def mumford(fn_in):
-	nc = 5
+	nc = 16
 	#Params from [1]
 	theta = 1
-	tau = 0.01
+	tau = 0.05
 
 	h = 1 			#Not sure this is right...
 	L2 = 8/h**2
 	sigma = 1/(L2 * tau)
 
 	lmda = 5e-6		#Not sure what this should be set to....
-	ny = 256
+	ny = 200
 
 	#Test code
-	fn_in = './jellyfish.jpg'
+	#fn_in = './black_white_orange.png'
+	fn_in = './butterfly.png'
 
 	bn = basename(os.path.splitext(fn_in)[0])
 
@@ -177,6 +188,7 @@ def mumford(fn_in):
 	res_G = project_simplex
 	K = lambda x: grad(x, h)
 	K_star = lambda x: -div(x, h)
+	j_tv = lambda x: J1(x, h)
 
 	#Generate set of images, f_l, that are the error measures for each pixel and 
 	#each color, c_l, obtained from k-means
@@ -190,21 +202,25 @@ def mumford(fn_in):
 	u = res_G(np.zeros((ny, nx, nc)))
 	p = res_F(K(u))
 
+	#Start with a better initial guess based on k-means clustering
+
 	#Test
 	#u = np.zeros((ny, nx, nc))
 	#p = np.zeros((ny, nx, 2, nc))
 
 	#Run chambolle algorithm
-	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, n_iter = 500,\
+	n_iter = 100
+	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = n_iter,\
 		im_updates = 50, im_out = '%s_MS_niter_%04d_inprogress.png'%(bn,n_iter))
 
 	#Take argmax of u tensor to obtain segmented image
 	#Paint the image by the cluster colors
-	ms_img = np.zeros(img.shape)
-	for i in range(ny):
-		for j in range(nx):
-			col = np.argmax(u_s[i,j,:])
-			ms_img[i,j,:] = centers[col,:]
+	#ms_img = np.zeros(img.shape)
+	#for i in range(ny):
+	#	for j in range(nx):
+	#		col = np.argmax(u_s[i,j,:])
+	#		ms_img[i,j,:] += centers[col,:]
+	ms_img = np.dot(u_s,centers)
 	ms_img = ms_img.astype(np.uint8)
 	cv2.imwrite('%s_MS_niter_%04d.png'%(bn,n_iter), ms_img)
 	return ms_img
