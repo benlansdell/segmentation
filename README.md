@@ -1,6 +1,12 @@
 Mumford-Shah image segmentation
 ===============================
 
+This code provides a CPU (slow\*) implementation of an approximation to Mumford-Shah image segmentation. 
+
+See the exposition jupyter notebook for more explanation about what's going on.
+
+\* GPU implementation coming... 
+
 Based on:
  * "A first-order primal-dual algorithm for convex problems with applications to imaging" 
 Chambolle, Antonin and Pock, Thomas (2011)
