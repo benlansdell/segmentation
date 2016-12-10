@@ -6,21 +6,22 @@ from sklearn.cluster import KMeans
 import argparse
 from os.path import basename
 import os.path 
+import os 
 
 def J1(x, h):
 	return np.sum(np.linalg.norm(grad(x,h), axis = 2))
 
-def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = 100, eps = 1e-6, im_updates = 0, im_out = None):
+def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = 100, eps = 1e-6, im_updates = 0, im_out = None, centers = None):
 	x_bar = x.copy()
 	x_old = x.copy()
-
+	save_progress = im_updates > 0 and centers is not None and im_out is not None
 	print('Chambolle proximal point algorithm for mumford-shah image segmentation\nIter:\tdX:\t\tJ(u):\t\tf:\t\tPrimal objective:')
 	for n in range(n_iter):
 		err = np.linalg.norm(x-x_old)
-		ju = j_tv(x);
-		fu = np.sum(f*x);
-		obj = fu + ju;
-		print('%d\t%f\t%f\t%f\t%f'%(n, err, ju, fu, obj));
+		ju = j_tv(x)
+		fu = np.sum(f*x)
+		obj = fu + ju
+		print('%d\t%e\t%e\t%e\t%e'%(n, err, ju, fu, obj))
 		if (err < eps) and (n > 0):
 			break
 		x_old = x.copy()
@@ -30,15 +31,12 @@ def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter 
 
 		#If im_updates is greater than 0 then we output our progress every
 		#im_updates iterations
-		#if im_updates > 0 and (n%im_updates) == 0:
-		#	#Print to im_out
-		#	ms_img = np.zeros(img.shape)
-		#	for i in range(ny):
-		#		for j in range(nx):
-		#			col = np.argmax(u_s[i,j,:])
-		#			ms_img[i,j,:] = centers[col,:]
-		#	ms_img = ms_img.astype(np.uint8)
-		#	cv2.imwrite('%s_MS_niter_%04d.png'%(bn,n_iter), ms_img)
+		if save_progress and (n%im_updates) == 0:
+			#Print to im_out
+			ms_img = np.dot(x,centers)
+			ms_img = ms_img.astype(np.uint8)
+			ms_img = ms_img.astype(np.uint8)
+			cv2.imwrite('%s_n_%04d.png'%(im_out,n), ms_img)
 	return x
 
 def grad(u, h):
@@ -150,7 +148,7 @@ def mumford(fn_in):
 	L2 = 8/h**2
 	sigma = 1/(L2 * tau)
 
-	lmda = 5e-6		#Not sure what this should be set to....
+	lmda = 5		#Not sure what this should be set to....
 	ny = 200
 
 	#Test code
@@ -158,6 +156,9 @@ def mumford(fn_in):
 	fn_in = './butterfly.png'
 
 	bn = basename(os.path.splitext(fn_in)[0])
+	dr = './progress_frames/'
+	if not os.path.exists(dr):
+	    os.makedirs(dr)
 
 	#Load image
 	img = cv2.imread(fn_in)
@@ -209,9 +210,9 @@ def mumford(fn_in):
 	#p = np.zeros((ny, nx, 2, nc))
 
 	#Run chambolle algorithm
-	n_iter = 100
+	n_iter = 1000
 	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = n_iter,\
-		im_updates = 50, im_out = '%s_MS_niter_%04d_inprogress.png'%(bn,n_iter))
+		im_updates = 2, im_out = '%s/%s_MS_niter_%04d'%(dr,bn,n_iter), centers = centers)
 
 	#Take argmax of u tensor to obtain segmented image
 	#Paint the image by the cluster colors
@@ -261,5 +262,7 @@ Ben Lansdell
 	#	help='input video file, any format readable by OpenCV')
 	parser.add_argument('fn_in', default='./butterfly_part.png', 
 		help='input video file, any format readable by OpenCV')
+	parser.add_argument('-lambda', default=1, 
+		help='Regulaization term. Lower means smoother, higher means closer to image')
 	args = parser.parse_args()
 	mumford(args.fn_in)
