@@ -1,9 +1,11 @@
 Mumford-Shah image segmentation
 ===============================
 
-The code provides a CPU (slow) implementation of an approximation to Mumford-Shah image segmentation. 
+This code provides a CPU (slow\*) implementation of an approximation to Mumford-Shah image segmentation. 
 
-The basic idea is to fix a set of $k$ colors we are going to segment the image with. We want to do so in a way that avoids high spatial variability while maintaining sharp transitions between regions of very different color. The solution is to use a total-variation (TV) penalty. Let $c_i$ be   
+See the exposition jupyter notebook for more explanation about what's going on.
+
+\* GPU implementation coming... 
 
 Based on:
  * "A first-order primal-dual algorithm for convex problems with applications to imaging" 
