@@ -15,7 +15,7 @@ def chambolle(x, y, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter 
 	x_bar = x.copy()
 	x_old = x.copy()
 	save_progress = im_updates > 0 and centers is not None and im_out is not None
-	print('Chambolle proximal point algorithm for mumford-shah image segmentation\nIter:\tdX:\t\tJ(u):\t\tf:\t\tPrimal objective:')
+	print('====================================================================\nIter:\tdX:\t\tJ(u):\t\tf:\t\tPrimal objective:')
 	for n in range(n_iter):
 		err = np.linalg.norm(x-x_old)
 		ju = j_tv(x)
@@ -138,7 +138,7 @@ def project_simplex(u):
 			u[i,j,:] = proj_prob(np.squeeze(u[i,j,:]))
 	return u 
 
-def mumford(fn_in):
+def mumford(fn_in, l=5):
 	nc = 16
 	#Params from [1]
 	theta = 1
@@ -148,7 +148,7 @@ def mumford(fn_in):
 	L2 = 8/h**2
 	sigma = 1/(L2 * tau)
 
-	lmda = 5		#Not sure what this should be set to....
+	lmda = l		#Not sure what this should be set to....
 	ny = 200
 
 	#Test code
@@ -210,9 +210,9 @@ def mumford(fn_in):
 	#p = np.zeros((ny, nx, 2, nc))
 
 	#Run chambolle algorithm
-	n_iter = 1000
+	n_iter = 300
 	u_s = chambolle(u, p, tau, sigma, theta, K, K_star, f, res_F, res_G, j_tv, n_iter = n_iter,\
-		im_updates = 2, im_out = '%s/%s_MS_niter_%04d'%(dr,bn,n_iter), centers = centers)
+		im_updates = 3, im_out = '%s/%s_MS_lambda_%.02e_niter_%04d'%(dr,bn,l,n_iter), centers = centers)
 
 	#Take argmax of u tensor to obtain segmented image
 	#Paint the image by the cluster colors
@@ -223,7 +223,7 @@ def mumford(fn_in):
 	#		ms_img[i,j,:] += centers[col,:]
 	ms_img = np.dot(u_s,centers)
 	ms_img = ms_img.astype(np.uint8)
-	cv2.imwrite('%s_MS_niter_%04d.png'%(bn,n_iter), ms_img)
+	cv2.imwrite('%s_MS_lambda_%.02e_niter_%04d.png'%(bn,l,n_iter), ms_img)
 	return ms_img
 
 if __name__ == '__main__':
@@ -253,8 +253,7 @@ Unit simplex projection based on
 Wang, Weiran and Miguel, A (2013)
 arXiv:1309.1541v1
 
-Ben Lansdell
-11/22/2016
+Ben Lansdell. 2016
 """
 
 	parser = argparse.ArgumentParser()
@@ -262,7 +261,12 @@ Ben Lansdell
 	#	help='input video file, any format readable by OpenCV')
 	parser.add_argument('fn_in', default='./butterfly_part.png', 
 		help='input video file, any format readable by OpenCV')
-	parser.add_argument('-lambda', default=1, 
+	parser.add_argument('-lambda', default=1, dest='l', type = float,
 		help='Regulaization term. Lower means smoother, higher means closer to image')
 	args = parser.parse_args()
-	mumford(args.fn_in)
+
+	#Set up multiprocessing
+	print '===================================================================='
+	print 'Chambolle proximal point algorithm for mumford-shah image segmentation'
+	print 'Regularization (smaller = smoother): lambda =', args.l
+	mumford(args.fn_in, args.l)
