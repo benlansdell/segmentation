@@ -154,7 +154,7 @@ def mumford(fn_in, l=5):
 
 	#Test code
 	#fn_in = './black_white_orange.png'
-	fns_in = ['./butterfly.png']
+	fns_in = ['./butterfly1.png', './butterfly2.png', './butterfly3.png', './butterfly4.png']
 
 	bn = basename(os.path.splitext(fn_in)[0])
 	dr = './progress_frames/'
